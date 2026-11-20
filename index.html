@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fényvisszaverődés Gyakorló</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; max-width: 600px; margin: 20px auto; padding: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); background-color: #fff; border-radius: 8px; }
+        h1, h2 { text-align: center; color: #2c3e50; margin: 5px; }
+        .stats { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 15px; background-color: #eef2f3; padding: 10px; border-radius: 5px; }
+        .canvas-container { text-align: center; margin: 15px 0; }
+        canvas { border: 1px solid #ccc; background-color: #fafafa; border-radius: 4px; }
+        .question-box { font-size: 1.1em; margin-bottom: 15px; background-color: #e8f4fd; padding: 15px; border-left: 5px solid #3498db; border-radius: 4px; }
+        .input-group { margin: 15px 0; display: flex; gap: 10px; }
+        input[type="number"] { padding: 8px; font-size: 1em; width: 100px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 8px 15px; font-size: 1em; cursor: pointer; border: none; border-radius: 4px; }
+        .btn-primary { background-color: #2ecc71; color: white; }
+        .btn-primary:hover { background-color: #27ae60; }
+        .btn-danger { background-color: #e74c3c; color: white; width: 100%; margin-top: 15px; }
+        .btn-danger:hover { background-color: #c0392b; }
+        .feedback { font-weight: bold; margin-top: 10px; font-size: 1.1em; }
+        .success { color: #27ae60; }
+        .error { color: #c0392b; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+</head>
+<body>
+
+    <h1>Fényvisszaverődés törvénye</h1>
+    <h2>Gyakorló program</h2>
+
+    <div class="stats">
+        <div>Aktuális pontszám: <span id="score">0</span></div>
+        <div>Kérdés: <span id="question-count">1</span></div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="sketchCanvas" width="450" height="280"></canvas>
+    </div>
+
+    <div class="question-box" id="question-text">Betöltés...</div>
+
+    <div class="input-group">
+        <input type="number" id="answer-input" placeholder="Szög (°)" min="0" max="180">
+        <button class="btn-primary" onclick="checkAnswer()">Ellenőrzés</button>
+    </div>
+
+    <div class="feedback" id="feedback-text"></div>
+    <button class="btn-danger" onclick="endGame()">Játék befejezése    /    Mentés    <strong>(MAX 20 PONT !!!)</strong></button>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyC4ypKsFziwbyOQ87Sb-1PrrIZcvLf1_xQ",
+            authDomain: "://firebaseapp.com",
+            databaseURL: "https://fizikadomino-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "fizikadomino",
+            storageBucket: "fizikadomino.firebasestorage.app",
+            messagingSenderId: "272119065201",
+            appId: "1:272119065201:web:c6bdc223fd9a61394f49d0",
+            measurementId: "G-6PNNLQV1GH"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        let score = 0, totalQuestions = 1, currentAlpha = 0, currentBeta = 0, correctValue = 0;
+
+        function generateTask() {
+            document.getElementById("feedback-text").innerText = "";
+            document.getElementById("answer-input").value = "";
+            document.getElementById("score").innerText = score;
+            document.getElementById("question-count").innerText = totalQuestions;
+
+            // Beesési szög generálása (15 és 75 fok között a szép vázlatért)
+            currentAlpha = Math.floor(Math.random() * 61) + 15; 
+            currentBeta = currentAlpha; 
+
+            const alphaPlusBeta = currentAlpha + currentBeta; 
+            const mirrorAngle = 90 - currentAlpha;            
+
+            // Kérdés típusok szétválasztása (0: Beesési szöget kérdezünk, 1: Visszaverődési szöget kérdezünk)
+            const askType = Math.floor(Math.random() * 2);
+            correctValue = currentAlpha; // Mindkét esetben ugyanaz az érték, mivel alfa = béta
+
+            // Megadható adatok listája (kiszűrve azt, amit kérdezünk!)
+            // Ha askType == 0 (Alfát kérdezzük), akkor megadhatunk bétát, bezárt szöget vagy tükör szöget
+            // Ha askType == 1 (Bétát kérdezzük), akkor megadhatunk alfát, bezárt szöget vagy tükör szöget
+            const options = [];
+            if (askType === 0) {
+                options.push({ text: `A visszaverődési szög (β) = ${currentBeta}°`, type: 'beta' });
+            } else {
+                options.push({ text: `A beesési szög (α) = ${currentAlpha}°`, type: 'alpha' });
+            }
+            options.push({ text: `A beeső és a visszaverődő fénysugár által bezárt szög = ${alphaPlusBeta}°`, type: 'both' });
+            options.push({ text: `A tükör és a fénysugár által bezárt szög = ${mirrorAngle}°`, type: 'mirror' });
+
+            // Véletlenszerűen választunk a biztonságos opciók közül
+            const chosenOption = options[Math.floor(Math.random() * options.length)];
+            const askText = (askType === 0) ? "Mekkora a beesési szög (α)?" : "Mekkora a visszaverődési szög (β)?";
+
+            document.getElementById("question-text").innerHTML = `<strong>Adott:</strong> ${chosenOption.text}<br><strong>Kérdés:</strong> ${askText}`;
+            
+            drawSketch();
+        }
+
+        function drawSketch() {
+            const canvas = document.getElementById("sketchCanvas");
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const cx = canvas.width / 2;
+            const cy = canvas.height - 50;
+            const r = 140;
+
+            // 1. Tükör rajzolása
+            ctx.lineWidth = 4; ctx.strokeStyle = "#2c3e50";
+            ctx.beginPath(); ctx.moveTo(20, cy); ctx.lineTo(canvas.width - 20, cy); ctx.stroke();
+
+            // Tükör sraffozás
+            ctx.lineWidth = 1;
+            for (let i = 30; i < canvas.width - 20; i += 10) {
+                ctx.beginPath(); ctx.moveTo(i, cy); ctx.lineTo(i - 5, cy + 8); ctx.stroke();
+            }
+
+            // 2. Beesési merőleges (Szaggatott)
+            ctx.lineWidth = 2; ctx.strokeStyle = "#7f8c8d";
+            ctx.setLineDash([6, 6]);
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - r - 20); ctx.stroke();
+            ctx.setLineDash([]); // Visszaállítás simára
+
+            // Szögek radiánban (A merőlegeshez képest mérve)
+            const alphaRad = (currentAlpha * Math.PI) / 180;
+            const betaRad = (currentBeta * Math.PI) / 180;
+
+            // 3. Beeső fénysugár (Piros - balról beérkező)
+            const bx = cx - r * Math.sin(alphaRad);
+            const by = cy - r * Math.cos(alphaRad);
+            ctx.lineWidth = 3; ctx.strokeStyle = "#e74c3c";
+            ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(cx, cy); ctx.stroke();
+
+            // 4. Visszaverődő fénysugár (Kék - jobbra távozó)
+            const vx = cx + r * Math.sin(betaRad);
+            const vy = cy - r * Math.cos(betaRad);
+            ctx.strokeStyle = "#3498db";
+            ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(vx, vy); ctx.stroke();
+
+            // Nyilak rajzolása a vonalakra
+            drawArrow(bx, by, cx, cy, ctx, "#e74c3c");
+            drawArrow(cx, cy, vx, vy, ctx, "#3498db");
+
+            // 5. Körívek rajzolása a szögekhez (Alfa és Béta jelölés)
+            const arcRadius = 40;
+            // Alfa ív (merőlegestől balra)
+            ctx.lineWidth = 1.5; ctx.strokeStyle = "#e74c3c";
+            ctx.beginPath();
+            ctx.arc(cx, cy, arcRadius, -Math.PI/2 - alphaRad, -Math.PI/2);
+            ctx.stroke();
+
+            // Béta ív (merőlegestől jobbra)
+            ctx.strokeStyle = "#3498db";
+            ctx.beginPath();
+            ctx.arc(cx, cy, arcRadius + 5, -Math.PI/2, -Math.PI/2 + betaRad);
+            ctx.stroke();
+
+            // Szöveges feliratok
+            ctx.font = "bold 14px Arial";
+            ctx.fillStyle = "#e74c3c"; ctx.fillText("α", cx - 17, cy - 48);
+            ctx.font = "12px Arial"; ctx.fillText("Beeső sugár", bx - 10, by - 10);
+
+            ctx.font = "bold 14px Arial";
+            ctx.fillStyle = "#3498db"; ctx.fillText("β", cx + 7, cy - 48);
+            ctx.font = "12px Arial"; ctx.fillText("Visszaverődő sugár", vx - 45, vy - 10);
+            
+            ctx.fillStyle = "#7f8c8d"; ctx.fillText("Beesési merőleges", cx - 50, cy - r - 25);
+            ctx.fillStyle = "#2c3e50"; ctx.fillText("Tükör", 30, cy - 12);
+        }
+
+        function drawArrow(fromx, fromy, tox, toy, ctx, color) {
+            const mx = (fromx + tox) / 2;
+            const my = (fromy + toy) / 2;
+            const angle = Math.atan2(toy - fromy, tox - fromx);
+            const headlen = 12;
+            ctx.save();
+            ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(mx, my);
+            ctx.lineTo(mx - headlen * Math.cos(angle - Math.PI / 6), my - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(mx - headlen * Math.cos(angle + Math.PI / 6), my - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            ctx.restore();
+        }
+
+        function checkAnswer() {
+            const userInput = document.getElementById("answer-input").value;
+            const feedbackElement = document.getElementById("feedback-text");
+
+            if (userInput === "") {
+                feedbackElement.innerText = "Kérlek, írj be egy számot!";
+                feedbackElement.className = "feedback error";
+                return;
+            }
+
+            if (parseInt(userInput) === correctValue) { 
+			    feedbackElement.innerText = "Helyes válasz! +1 pont";
+                feedbackElement.className = "feedback success";
+                score++;
+            } else {
+                feedbackElement.innerText = `Sajnos nem jó. A helyes megoldás: ${correctValue}° volt.`;
+                feedbackElement.className = "feedback error";
+            }
+
+            totalQuestions++;
+            setTimeout(generateTask, 2500);
+        }
+
+        function endGame() {
+            const name = prompt("Meguntad a gyakorlást? Add meg a neved az eredményed mentéséhez:");
+            if (name === null || name.trim() === "") {
+                alert("Név megadása nélkül az eredmény nem kerül mentésre.");
+                return;
+            }
+
+            const finalScore = score > 20 ? 20 : score;
+
+            database.ref('fenyvisszaverodes').push({
+                name: name.trim(),
+                score: finalScore
+            }).then(() => {
+                alert(`Sikeresen mentve!\nNév: ${name}\nElért pontszám: ${score}\nAdatbázisba rögzítve: ${finalScore} pont.`);
+                score = 0; totalQuestions = 1;
+                generateTask();
+            }).catch((error) => {
+                alert("Hiba történt a mentés során: " + error.message);
+            });
+        }
+
+        window.onload = generateTask;
+    </script>
+</body>
+</html>
